@@ -30,7 +30,7 @@ CMD1 - start RViz simulator and MoveIt:
 - 2. source install/setup.bash
 - 3. ros2 launch panda_description_and_moveit demo.launch.py
 
-CMD2 - start ros2 nodes for executing actions
+CMD2 - start ros2 nodes for executing actions and services
 - 4. source install/setup.bash
 - 5. ros2 launch pacchetto_nodi preparazione.launch.py
 
