@@ -31,12 +31,12 @@ CMD1 - start RViz simulator and MoveIt:
 - 3. ros2 launch panda_description_and_moveit demo.launch.py
 
 CMD2 - start ros2 nodes for executing actions
-- 3. source install/setup.bash
-- 4. ros2 launch pacchetto_nodi preparazione.launch.py
+- 4. source install/setup.bash
+- 5. ros2 launch pacchetto_nodi preparazione.launch.py
 
 CMD3 - start task node orchestrator
-- 5. source install/setup.bash
-- 6. ros2 run pacchetto_nodi task_node   $(ros2 pkg prefix pacchetto_nodi)/share/pacchetto_nodi/config/task_config.yaml
+- 6. source install/setup.bash
+- 7. ros2 run pacchetto_nodi task_node   $(ros2 pkg prefix pacchetto_nodi)/share/pacchetto_nodi/config/task_config.yaml
 
 
 ---
