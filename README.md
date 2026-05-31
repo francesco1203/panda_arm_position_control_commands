@@ -22,21 +22,20 @@ Braccio Panda - Comandi di controllo in posizione / Panda arm - Position control
 
 On LinuxUbuntu, using cmd:
 
-- 1. colcon build --symlink-install
+- 0. Download and run your simulator
+(you can use: sudo apt install ros-jazzy-moveit-resources-panda)
 
 Write your commands in src/pacchetto_nodi/config/task_config.yaml
 
-CMD1 - start RViz simulator and MoveIt:
+- 1. colcon build --symlink-install
+
+CMD1 - start ros2 nodes for executing actions and services
 - 2. source install/setup.bash
-- 3. ros2 launch panda_description_and_moveit demo.launch.py
+- 3. ros2 launch pacchetto_nodi preparazione.launch.py
 
-CMD2 - start ros2 nodes for executing actions and services
+CMD2 - start task node orchestrator
 - 4. source install/setup.bash
-- 5. ros2 launch pacchetto_nodi preparazione.launch.py
-
-CMD3 - start task node orchestrator
-- 6. source install/setup.bash
-- 7. ros2 run pacchetto_nodi task_node   $(ros2 pkg prefix pacchetto_nodi)/share/pacchetto_nodi/config/task_config.yaml
+- 5. ros2 run pacchetto_nodi task_node   $(ros2 pkg prefix pacchetto_nodi)/share/pacchetto_nodi/config/task_config.yaml
 
 
 ---
@@ -45,7 +44,6 @@ CMD3 - start task node orchestrator
 
 - src/pacchetto_interfacce          (azioni e servizi/actions and services)
 - src/pacchetto_nodi                (nodi da eseguire/nodes to execute)
-- src/panda_description_and_moveit  (urfd, Rviz config, launch file for simulator)
 
 ---
 
