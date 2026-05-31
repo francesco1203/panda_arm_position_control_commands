@@ -1,0 +1,10 @@
+# Goal — mandato dal task
+float64[] q_desired
+float64 duration
+---
+# Result
+bool success
+---
+# Feedback
+float64[] q_current
+float64 progress

@@ -1,0 +1,11 @@
+# Goal 
+geometry_msgs/Pose pose_desired   # x,y,z, orientation (quaternione)
+bool keep_prev_orientation        # true = ignora pose_desired.orientation e mantiene l'orientamento attuale
+float64 duration
+---
+# Result
+bool success
+---
+# Feedback
+geometry_msgs/Pose pose_current  #x,y,z, orientation (quaternione)
+float64 progress

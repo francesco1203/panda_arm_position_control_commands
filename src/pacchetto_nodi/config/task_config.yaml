@@ -1,0 +1,31 @@
+moves:
+  # Movimento giunti — uguale a prima
+  - type: "j"
+    duration: 5.0
+    q_desired: [0.0, -0.785, 0.0, -2.356, 0.0, 1.571, 0.785]
+
+  # Orientamento desiderato esplicito
+  - type: "c"
+    duration: 4.0
+    keep_previous_orientation: false
+    position:
+      x: 0.3
+      y: 0.0
+      z: 0.5
+    orientation:
+      w: 0.707
+      x: 0.0
+      y: 0.707
+      z: 0.0
+
+  # Orientamento costante — uguale a quello attuale al momento dell'esecuzione
+  - type: "c"
+    duration: 4.0
+    keep_previous_orientation: true
+    position:
+      x: 0.4
+      y: 0.1
+      z: 0.5
+    # orientation: non serve scriverla
+
+ 
