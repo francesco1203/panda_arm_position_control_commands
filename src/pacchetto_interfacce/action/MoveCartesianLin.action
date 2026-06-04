@@ -2,6 +2,7 @@
 geometry_msgs/Pose pose_desired   # x,y,z, orientation (quaternione)
 bool keep_prev_orientation        # true = ignora pose_desired.orientation e mantiene l'orientamento attuale
 float64 duration
+char cinematic_profile          # profilo cinematico, "q" -> quintico, "t" -> trapz
 ---
 # Result
 bool success

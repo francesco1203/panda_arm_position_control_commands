@@ -6,13 +6,33 @@
 
 // Costanti specifiche del robot (Panda)
 constexpr int N_JOINTS              = 7;
+
 const std::string PLANNING_GROUP    = "panda_arm";
+
 const std::string LAST_LINK         = "panda_hand";
-const std::string BASE_LINK         = "panda_link0";        //coincidente con world
+const std::string BASE_LINK         = "panda_link0";        
+
 const std::vector<std::string> PANDA_JOINT_NAMES = {
-    "panda_joint1", "panda_joint2", "panda_joint3",
-    "panda_joint4", "panda_joint5", "panda_joint6", "panda_joint7"
+    "panda_joint1", 
+    "panda_joint2", 
+    "panda_joint3",
+    "panda_joint4", 
+    "panda_joint5", 
+    "panda_joint6", 
+    "panda_joint7"
 };
+
+// const std::vector<double> PANDA_JOINT_MAX_ACCELERATION = { //trovate in rete*
+//     3.75,   // panda_joint1 [rad/s²]
+//     1.875,  // panda_joint2 [rad/s²]
+//     2.5,    // panda_joint3 [rad/s²]
+//     3.125,  // panda_joint4 [rad/s²]
+//     3.75,   // panda_joint5 [rad/s²]
+//     5.0,    // panda_joint6 [rad/s²]
+//     5.0     // panda_joint7 [rad/s²]
+// };
+//*NOTA: verificare la correttezza delle informazioni se passi fuori simulazione
+
 
 //per controllo di singolarità panda
 constexpr double SINGULARITY_THRESHOLD_WARNING = 0.01;  // soglia per considerare una configurazione di warning

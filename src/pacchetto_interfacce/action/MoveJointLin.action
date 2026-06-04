@@ -1,6 +1,7 @@
 # Goal — mandato dal task
 float64[] q_desired
-float64 duration
+float64 duration            # durata in secondi
+char cinematic_profile      # profilo cinematico, "q" -> quintico, "t" -> trapz
 ---
 # Result
 bool success

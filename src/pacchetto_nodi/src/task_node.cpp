@@ -46,6 +46,7 @@ struct Move {
     Quaternion Q;                // usato solo se type == "cartesian" (versione avanzata)*
     bool keep_prev_orientation;  // usato solo se type == "cartesian" (versione avanzata)*
     double duration;
+    char cinematic_profile;      // 't' o 'q' trapezoidal o cartesian
 };
 
 // NOTA* : se keep_prev_orientation è true, allora Q viene ignorato e si mantiene 
@@ -122,7 +123,7 @@ class TaskOrchestrator : public rclcpp::Node
      * Metodo pubblico per inviare il movimento giunti.
      * Restituisce un std::shared_future che si sbloccherà SOLO quando il robot avrà finito il movimento.
      */
-    ShrdFuture_MJL invia_movimento_giunti(const joint_config & q_desired, double duration)
+    ShrdFuture_MJL invia_movimento_giunti(const joint_config & q_desired, double duration, char cinematic_profile)
     {
         // Creiamo una promessa che verrà mantenuta quando l'azione sarà finita
         auto promise = std::make_shared<Promise_MJL>();
@@ -143,7 +144,8 @@ class TaskOrchestrator : public rclcpp::Node
         auto goal_msg = MoveJointLinAct::Goal();
         goal_msg.q_desired = q_desired;
         goal_msg.duration = duration;
-
+        goal_msg.cinematic_profile = cinematic_profile;
+        
 
         // SendGoalOptions: struttura che contiene le 3 callback
         auto send_goal_options = SendGoalOptions_MJL();
@@ -224,7 +226,7 @@ class TaskOrchestrator : public rclcpp::Node
      * duration  durata del movimento in secondi
      */
     ShrdFuture_MCL invia_movimento_cartesiano(
-        double x, double y, double z, Quaternion Q, bool keep_prev_orientation, double duration)
+        double x, double y, double z, Quaternion Q, bool keep_prev_orientation, double duration, char cinematic_profile)
     {
         // --- Preparazione promise/future ---
         auto promise = std::make_shared<Promise_MCL>();
@@ -257,6 +259,9 @@ class TaskOrchestrator : public rclcpp::Node
         goal_msg.keep_prev_orientation = keep_prev_orientation;   
 
         goal_msg.duration = duration;
+
+        goal_msg.cinematic_profile = cinematic_profile;
+        
 
         
         // --- Le 3 callback ---
@@ -436,7 +441,25 @@ class TaskOrchestrator : public rclcpp::Node
                 throw std::runtime_error("tipo mossa sconosciuto");
             }
 
+            //salvo durata
             m.duration = node["duration"].as<double>();
+
+
+            //salvo profilo cinematico
+            char cinematic_profile = node["cinematic_profile"].as<char>();   // accetta: "t" / "T" o "q" / "Q"
+
+            if(cinematic_profile == 't' || cinematic_profile == 'T')
+                m.cinematic_profile = 't';
+            else if(cinematic_profile == 'q' || cinematic_profile == 'Q')
+                m.cinematic_profile = 'q';
+            else    // Tipo char sconosciuto fermarsi 
+            {
+                RCLCPP_FATAL(this->get_logger(),
+                    "Tipo di profilo cinematico sconosciuto: Usa 't'/'T' o 'q'/'Q'");
+                throw std::runtime_error("tipo profilo cinematico sconosciuto");
+            }
+
+            //salvo la mossa
             risultato.push_back(m);
         }
 
@@ -470,7 +493,9 @@ int main(int argc, char ** argv)
     for (const auto & mossa : orchestrator->get_mosse())
     {
         RCLCPP_INFO(orchestrator->get_logger(),
-            "Eseguo mossa di tipo: %c", mossa.type);  
+            "Mossa di tipo: %c\nDurata: %.2f\nCon profilo: %c", 
+            mossa.type, mossa.duration, mossa.cinematic_profile);
+
 
         if (mossa.type == 'j' || mossa.type == 'J')
         {
@@ -478,16 +503,13 @@ int main(int argc, char ** argv)
             orchestrator->print_and_wait("Avvia movimento giunti?");
 
             auto future = orchestrator->invia_movimento_giunti(
-                mossa.q_desired, mossa.duration);
+                mossa.q_desired, 
+                mossa.duration, 
+                mossa.cinematic_profile
+            );
 
-            RCLCPP_INFO(orchestrator->get_logger(), "Future creato, aspetto...");
 
             future.wait();
-
-            RCLCPP_INFO(orchestrator->get_logger(),
-                "Future sbloccato, result code: %d",
-                static_cast<int>(future.get().code)); 
-
 
             if (future.get().code != rclcpp_action::ResultCode::SUCCEEDED) {
                 RCLCPP_ERROR(orchestrator->get_logger(),
@@ -496,13 +518,11 @@ int main(int argc, char ** argv)
             }
             RCLCPP_INFO(orchestrator->get_logger(), "Movimento giunti completato.");
 
-            
-
         }
         else if (mossa.type == 'c' || mossa.type == 'C')
         {
             // ---- MOVIMENTO CARTESIANO ----
-            orchestrator->print_and_wait("Avvia movimento cartesiano?");
+            orchestrator->print_and_wait("Avvia movimento cartesiano? (+ accensione clik)");
 
             // Accendi il CLIK prima di mandare il goal
             if (!orchestrator->chiama_clik_on_off(true)) {
@@ -515,7 +535,9 @@ int main(int argc, char ** argv)
                 mossa.x, mossa.y, mossa.z,
                 mossa.Q,
                 mossa.keep_prev_orientation,        
-                mossa.duration);
+                mossa.duration,
+                mossa.cinematic_profile
+            );
 
             future.wait();
 
@@ -527,7 +549,7 @@ int main(int argc, char ** argv)
                     "Movimento cartesiano fallito. Interrompo.");
                 goto shutdown_sequence;
             }
-            RCLCPP_INFO(orchestrator->get_logger(), "Movimento cartesiano completato.");
+            RCLCPP_INFO(orchestrator->get_logger(), "Movimento cartesiano completato. (+ spegnimento clik)");
         }
     }
 
