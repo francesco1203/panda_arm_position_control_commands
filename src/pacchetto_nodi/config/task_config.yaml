@@ -21,7 +21,7 @@ moves:
       x: 0.3
       y: 0.0
       z: 0.5
-    orientation:
+    orientation:    #porta z_e su x_w, x_e su -z_w e y_e su y_w
       w: 0.707
       x: 0.0
       y: 0.707
@@ -30,7 +30,7 @@ moves:
   # Orientamento costante — uguale a quello attuale al momento dell'esecuzione
   - type: "c"
     duration: 4.0
-    cinematic_profile: "t"       #quintic
+    cinematic_profile: "q"       #quintic
     keep_previous_orientation: true
     position:
       x: 0.4
