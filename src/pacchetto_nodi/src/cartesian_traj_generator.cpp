@@ -26,7 +26,9 @@ using namespace std::placeholders;
 using namespace std::chrono_literals;
 
 /* COSTANTI NODO*/
-constexpr double T = 0.1;  // 10 Hz
+constexpr double T_CAMP = 0.1;                // 10 Hz
+constexpr double cdd_c_rot_CONST = 1.0;       // rad/s²  (per profilo trapezoidale)
+constexpr double cdd_c_trasl_CONST = 1.0;     // m/s²  (per profilo trapezoidale)
 
 
 class CartesianTrajGenerator : public rclcpp::Node
@@ -58,7 +60,10 @@ class CartesianTrajGenerator : public rclcpp::Node
 
 
     /* Costruttore */
-    CartesianTrajGenerator() : Node("cartesian_traj_generator")
+    CartesianTrajGenerator() : Node("cartesian_traj_generator"),
+      T_(T_CAMP),
+      cdd_c_trasl_(cdd_c_trasl_CONST),
+      cdd_c_rot_(cdd_c_rot_CONST)
     {
 
       // =========================================================
@@ -159,6 +164,10 @@ class CartesianTrajGenerator : public rclcpp::Node
     JointStateMsg last_joint_state_;      // ultimo messaggio ricevuto
     bool joint_state_received_ = false;   // flag: ho ricevuto almeno un messaggio?
 
+    float T_;
+    float cdd_c_trasl_;
+    float cdd_c_rot_;
+
     // MoveIt
     rclcpp::Node::SharedPtr robot_loader_node_;
     std::shared_ptr<robot_model_loader::RobotModelLoader> robot_model_loader_;
@@ -168,10 +177,58 @@ class CartesianTrajGenerator : public rclcpp::Node
 
 
 
-    /* Polinomio quintico */
+    //profilo cinematico quintico: restituisce q_hat(t) ∈ [0,1]
     double quintic(double tau)
     {
       return 6.0 * std::pow(tau, 5) - 15.0 * std::pow(tau, 4) + 10.0 * std::pow(tau, 3);
+    }
+
+    // Profilo cinematico trapezoidale: restituisce q_hat(t) ∈ [0,1]
+    // t: tempo attuale,tf: durata totale, cdd_c: accelerazione costante, delta_c: spostamento cartesiano
+    double trapezoidal(double t, double tf, double cdd_c, double delta_c)
+    {
+        // Caso degenere: nessuno spostamento richiesto
+        if (std::abs(delta_c) < 1e-9) return 0.0;
+
+
+        // Calcolo l'accelerazione minima assoluta (sempre positiva) per raggiungere l'obiettivo
+        double cdd_c_min = 4.0 * std::abs(delta_c) / (tf * tf); 
+
+        // Verifico se il modulo dell'accelerazione fornita è insufficiente
+        if (std::abs(cdd_c) < cdd_c_min) {
+            // Determino il segno corretto: deve seguire il verso dello spostamento (delta_q)
+            double sign = (delta_c >= 0.0) ? 1.0 : -1.0;
+            
+            // Applico il valore minimo mantenendo il segno corretto
+            double new_cdd_c = sign * cdd_c_min;
+
+            RCLCPP_WARN(this->get_logger(), 
+                "Rilevata accel. cartesiana troppo bassa. Clamped da %.4f a %.4f", cdd_c, new_cdd_c);
+
+            cdd_c = new_cdd_c;
+        }
+
+
+        // Calcolo del tempo di raccordo
+        double tc = tf / 2.0 - 0.5 * std::sqrt((tf * tf * cdd_c - 4.0 * delta_c) / cdd_c);
+
+        // Clamping di tc (robustezza numerica al caso limite)
+        if (tc < 0.0) tc = 0.0;
+
+
+        //generazione profilo trapezoidale
+        if (t < tc) {
+            // Fase 1: accelerazione costante
+            return (0.5 * cdd_c * t * t) / delta_c;
+        }
+        else if (t <= tf - tc) {
+            // Fase 2: velocità costante
+            return (cdd_c * tc * (t - tc / 2.0)) / delta_c;
+        }
+        else {
+            // Fase 3: decelerazione costante (simmetrica alla fase 1)
+            return 1.0 - (0.5 * cdd_c * (tf - t) * (tf - t)) / delta_c;
+        }
     }
 
 
@@ -186,10 +243,13 @@ class CartesianTrajGenerator : public rclcpp::Node
      */
     void execute(const GoalHandleCartesianoPtr goal_handle)
     {
-      RCLCPP_INFO(this->get_logger(), "Inizio traiettoria cartesiana...");
+      RCLCPP_INFO(this->get_logger(), "Esecuzione MoveCartLin...");
+
 
       const auto goal = goal_handle->get_goal();
       double tf = goal->duration;
+      char cinematic_profile = goal->cinematic_profile;  
+
 
       // ── 1. Leggi la configurazione attuale da /joint_states ───────
       RCLCPP_INFO(this->get_logger(), "Lettura configurazione attuale...");
@@ -245,7 +305,8 @@ class CartesianTrajGenerator : public rclcpp::Node
               goal->pose_desired.orientation.w,
               goal->pose_desired.orientation.x,
               goal->pose_desired.orientation.y,
-              goal->pose_desired.orientation.z);
+              goal->pose_desired.orientation.z
+            );
           Qf.normalize();
 
       }
@@ -260,7 +321,7 @@ class CartesianTrajGenerator : public rclcpp::Node
 
       // ── 4. Genera la traiettoria a 1/T (10) Hz ─────
 
-      int N = static_cast<int>(tf / T);   // numero di step della traiettoria
+      int N = static_cast<int>(tf / T_);   // numero di step della traiettoria
 
       auto feedback = std::make_shared<MoveCartesianLinAct::Feedback>();
       auto result = std::make_shared<MoveCartesianLinAct::Result>();
@@ -276,32 +337,79 @@ class CartesianTrajGenerator : public rclcpp::Node
           return;
         }
 
+        /*NOTA ── Interpolazione orientamento: SLERP(Q0, Qf, s) ───────────────────
+          slerp(Q0, Qf, s) interpola sfericamente tra i due quaternioni.
+          Con s=0 → Q0 (orientamento iniziale)
+          Con s=1 → Qf (orientamento desiderato dal goal)
+          
+          Eigen gestisce automaticamente il caso Q0·Qf < 0
+          (percorso più breve sulla sfera unitaria — niente salti bruschi)
+        */
+
+
         // Calcola tau ∈ [0,1]: frazione di tempo trascorsa
-        double t   = k * T;
+        double t   = k * T_;
         double tau = t / tf;
         if (tau > 1.0) tau = 1.0;   // clamp finale
 
-        // Profilo quintico: s ∈ [0,1] con velocità nulla agli estremi
-        double s = quintic(tau);
+        //risultati, preallocazione
+        double px, py, pz;
+        Quaternion Q_interp;
 
-        // ── Interpolazione posizione: p(s) = p0 + s*(pf - p0) ──────────────
-        double px = p0.x() + (pf_x - p0.x()) * s;
-        double py = p0.y() + (pf_y - p0.y()) * s;
-        double pz = p0.z() + (pf_z - p0.z()) * s;
+        if(cinematic_profile == 'q')  // uso profilo cinematico del polinomio quintico
+        {
+          /*NOTA
+          Siccome il profilo quintico dipende solo dal tempo iniziale al tempo finale, 
+          avremo un solo s valido per tutto, sia traslazione che rotazione.
+          */
 
-        // ── Interpolazione orientamento: SLERP(Q0, Qf, s) ───────────────────
-        //
-        // slerp(Q0, Qf, s) interpola sfericamente tra i due quaternioni.
-        // Con s=0 → Q0 (orientamento iniziale)
-        // Con s=1 → Qf (orientamento desiderato dal goal)
-        //
-        // Eigen gestisce automaticamente il caso Q0·Qf < 0
-        // (percorso più breve sulla sfera unitaria — niente salti bruschi)
-        Quaternion Q_interp = Q0.slerp(s, Qf);
+          // Profilo quintico: s ∈ [0,1] con velocità nulla agli estremi
+          double s = quintic(tau);
 
 
+          // ── Interpolazione 
+          px = p0.x() + (pf_x - p0.x()) * s;
+          py = p0.y() + (pf_y - p0.y()) * s;
+          pz = p0.z() + (pf_z - p0.z()) * s;
+          Q_interp = Q0.slerp(s, Qf);
+        }
+        else    //cinematic profile = 't' -> uso trapezoidale
+        {
+          /*NOTA
+          Siccome il profilo trapezoidale dipende oltre che dal tempo iniziale al tempo finale, 
+          anche dalla distanza tra il target e la posa attuale, scegliamo di avere due 's', una per 
+          la traslazione e una per la rotazione
+          */
 
-         // ── 5. Costruisci e pubblica il messaggio ───────────────────────────────
+          // Spostamento traslazionale: norma euclidea tra posizione iniziale e finale
+          double delta_p = std::sqrt(
+              std::pow(pf_x - p0.x(), 2) +
+              std::pow(pf_y - p0.y(), 2) +
+              std::pow(pf_z - p0.z(), 2)
+          );
+
+          // Spostamento rotazionale: angolo geodetico tra Q0 e Qf sulla sfera S³
+          // Il prodotto scalare Q0·Qf può essere > 1 per errori numerici → clamp a [-1, 1]
+          // Il valore assoluto garantisce il percorso più breve (< π)
+          double dot = std::abs(Q0.dot(Qf));
+          dot = std::min(dot, 1.0);                  // clamp per robustezza numerica
+          double delta_r = 2.0 * std::acos(dot);    // angolo geodetico ∈ [0, π]
+
+
+          //calcolo le due s
+          double s_pos = trapezoidal(t, tf, cdd_c_trasl_, delta_p);   // per px, py, pz
+          double s_rot = trapezoidal(t, tf, cdd_c_rot_, delta_r);     // per SLERP
+
+          // ── Interpolazione
+          px = p0.x() + (pf_x - p0.x()) * s_pos;
+          py = p0.y() + (pf_y - p0.y()) * s_pos;
+          pz = p0.z() + (pf_z - p0.z()) * s_pos;
+          Q_interp = Q0.slerp(s_rot, Qf);
+        }
+
+
+
+        // ── 5. Costruisci e pubblica il messaggio ───────────────────────────────
         PoseStampedMsg pose_msg;
         pose_msg.header.stamp    = this->now();
         pose_msg.header.frame_id = BASE_LINK ;    //panda_link0 coincidente con world

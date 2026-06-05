@@ -177,7 +177,7 @@ class JointTrajGenerator : public rclcpp::Node
 
 
     // Profilo cinematico trapezoidale: restituisce q_hat(t) ∈ [0,1]
-    // t: tempo attuale,tf: durata totale, qdd_c: accelerazione costante, delta_q: spostamento giunto (qf - qi), num_giunto: giunto in calcolo
+    // t: tempo attuale,tf: durata totale, qdd_c: accelerazione costante, delta_q: spostamento giunto (qf - qi)
     double trapezoidal(double t, double tf, double qdd_c, double delta_q)
     {
         // Caso degenere: nessuno spostamento richiesto
@@ -228,7 +228,7 @@ class JointTrajGenerator : public rclcpp::Node
     /* EXECUTE DELL'AZIONE */
     void execute(const GoalHandlePtr goal_handle)
     {
-        RCLCPP_INFO(this->get_logger(), "Avvio interpolazione quintica per MoveJointLin...");
+        RCLCPP_INFO(this->get_logger(), "Esecuzione MoveJointLin...");
 
         //estraggo i dati della richiesta, del goal
         const auto goal = goal_handle->get_goal();

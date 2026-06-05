@@ -12,28 +12,30 @@ moves:
     q_desired: [0.5, -0.700, 0.0, -1.8, 0.3, 1.571, 0.785]
 
 
-  # # Orientamento desiderato esplicito
-  # - type: "c"
-  #   duration: 4.0
-  #   keep_previous_orientation: false
-  #   position:
-  #     x: 0.3
-  #     y: 0.0
-  #     z: 0.5
-  #   orientation:
-  #     w: 0.707
-  #     x: 0.0
-  #     y: 0.707
-  #     z: 0.0
+  # Orientamento desiderato esplicito
+  - type: "c"
+    duration: 8.0
+    cinematic_profile: "t"       #trapezoidal
+    keep_previous_orientation: false
+    position:
+      x: 0.3
+      y: 0.0
+      z: 0.5
+    orientation:
+      w: 0.707
+      x: 0.0
+      y: 0.707
+      z: 0.0
 
-  # # Orientamento costante — uguale a quello attuale al momento dell'esecuzione
-  # - type: "c"
-  #   duration: 4.0
-  #   keep_previous_orientation: true
-  #   position:
-  #     x: 0.4
-  #     y: 0.1
-  #     z: 0.5
-  #   # orientation: non serve scriverla
+  # Orientamento costante — uguale a quello attuale al momento dell'esecuzione
+  - type: "c"
+    duration: 4.0
+    cinematic_profile: "t"       #quintic
+    keep_previous_orientation: true
+    position:
+      x: 0.4
+      y: 0.1
+      z: 0.5
+    # orientation: non serve scriverla
 
  
