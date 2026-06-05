@@ -185,47 +185,42 @@ class JointTrajGenerator : public rclcpp::Node
     // t: tempo attuale,tf: durata totale, qdd_c: accelerazione costante, delta_q: spostamento giunto (qf - qi)
     double trapezoidal(double t, double tf, double qdd_c, double delta_q)
     {
-        // Caso degenere: nessuno spostamento richiesto
-        if (std::abs(delta_q) < 1e-9) return 0.0;
+        // Lavoriamo esclusivamente con i moduli per la generazione della forma del profilo
+        qdd_c = std::abs(qdd_c);
+        double abs_delta_q = std::abs(delta_q);
 
+        // Se non deve muoversi, il fattore di avanzamento è già al 100% della (non) traiettoria
+        if (abs_delta_q < 1e-9) return 1.0; 
 
-        // Calcolo l'accelerazione minima assoluta (sempre positiva) per raggiungere l'obiettivo
-        double qdd_c_min = 4.0 * std::abs(delta_q) / (tf * tf); 
+        // Calcolo l'accelerazione minima assoluta
+        double qdd_c_min = 4.0 * abs_delta_q / (tf * tf); 
 
-        // Verifico se il modulo dell'accelerazione fornita è insufficiente
-        if (std::abs(qdd_c) < qdd_c_min) {
-            // Determino il segno corretto: deve seguire il verso dello spostamento (delta_q)
-            double sign = (delta_q >= 0.0) ? 1.0 : -1.0;
-            
-            // Applico il valore minimo mantenendo il segno corretto
-            double new_qdd_c = sign * qdd_c_min;
-
-            RCLCPP_WARN(this->get_logger(), 
-                "Rilevato giunto con qdd_c troppo basso. Clamped da %.4f a %.4f", qdd_c, new_qdd_c);
-
-            qdd_c = new_qdd_c;
+        if (qdd_c < qdd_c_min) {
+            qdd_c = qdd_c_min;
         }
 
+        // Argomento della radice protetto da valori negativi dovuti a precisione numerica
+        double root_arg = (tf * tf * qdd_c) - (4.0 * abs_delta_q);
+        if (root_arg < 0.0) root_arg = 0.0; // Protezione NaN
 
         // Calcolo del tempo di raccordo
-        double tc = tf / 2.0 - 0.5 * std::sqrt((tf * tf * qdd_c - 4.0 * delta_q) / qdd_c);
-
-        // Clamping di tc (robustezza numerica al caso limite)
+        double tc = tf / 2.0 - 0.5 * std::sqrt(root_arg / qdd_c);
         if (tc < 0.0) tc = 0.0;
 
-
-        //generazione profilo trapezoidale
+        // Generazione profilo normalizzato [0, 1] usando abs_delta_q
         if (t < tc) {
             // Fase 1: accelerazione costante
-            return (0.5 * qdd_c * t * t) / delta_q;
+            return (0.5 * qdd_c * t * t) / abs_delta_q;
         }
         else if (t <= tf - tc) {
             // Fase 2: velocità costante
-            return (qdd_c * tc * (t - tc / 2.0)) / delta_q;
+            return (qdd_c * tc * (t - tc / 2.0)) / abs_delta_q;
         }
         else {
-            // Fase 3: decelerazione costante (simmetrica alla fase 1)
-            return 1.0 - (0.5 * qdd_c * (tf - t) * (tf - t)) / delta_q;
+            // Fase 3: decelerazione costante
+            double t_inv = tf - t;
+            if (t_inv < 0.0) t_inv = 0.0; // Evita sforamenti oltre tf
+            return 1.0 - (0.5 * qdd_c * t_inv * t_inv) / abs_delta_q;
         }
     }
 
