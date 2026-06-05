@@ -21,6 +21,8 @@
 #include "pacchetto_nodi/message_alias.hpp"
 #include "pacchetto_nodi/panda_constants.hpp"
 #include "pacchetto_nodi/eigen_alias.hpp"
+#include "pacchetto_nodi/topic_names.hpp"
+
 
 using namespace std::placeholders;
 using namespace std::chrono_literals;
@@ -91,18 +93,20 @@ class CartesianTrajGenerator : public rclcpp::Node
 
       // Subscriber a /joint_states
       joint_states_sub_ = this->create_subscription<JointStateMsg>(
-        "joint_states", 10,
+        READING_JOINT_STATES_TOPIC, 10,
 
         // lambda callback: salva l'ultimo joint state ricevuto
         [this](const JointStateMsg::SharedPtr msg) {
             last_joint_state_ = *msg;       // salva il messaggio
             joint_state_received_ = true;   // segnala che è arrivato almeno uno
-        });
+        }
+      );
 
 
       // Publisher posa desiderata → letta dal clik
       cartesian_pose_pub_ = this->create_publisher<PoseStampedMsg>(
-        "desired_cartesian_pose", 10);
+        CARTESIAN_DESIRED_POSE_TOPIC, 10
+      );
 
 
       // Action server

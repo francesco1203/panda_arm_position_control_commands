@@ -17,6 +17,7 @@
 #include "pacchetto_nodi/message_alias.hpp"
 #include "pacchetto_nodi/panda_constants.hpp"
 #include "pacchetto_nodi/eigen_alias.hpp"       
+#include "pacchetto_nodi/topic_names.hpp" 
 
 
 using namespace std::chrono_literals;
@@ -51,10 +52,11 @@ class Clik : public rclcpp::Node
     //altro
     using joint_config  = std::vector<double>;
 
-    /* da common.hpp 
+    /* da .hpp 
     Alias Messaggi --> Pose, JointState 
     Alias Eigen --> Vector3d, Quaternion, Matrix ecc..
     Costanti N_JOINTS, PLANNING_GROUP, LAST_LINK, PANDA_JOINT_NAMES
+    nomi topic
     */
 
 
@@ -77,19 +79,22 @@ class Clik : public rclcpp::Node
 
       // Subscriber posa desiderata — pubblicata da cartesian_traj_generator
       desired_pose_sub_ = this->create_subscription<PoseStampedMsg>(
-        "desired_cartesian_pose", 10,
-        std::bind(&Clik::read_desired_pose_callback, this, _1));
+        CARTESIAN_DESIRED_POSE_TOPIC, 10,
+        std::bind(&Clik::read_desired_pose_callback, this, _1)
+      );
 
 
       // Subscriber configurazione attuale — pubblicata dal simulatore
       joint_states_sub_ = this->create_subscription<JointStateMsg>(
-        "/joint_states", 10,
-        std::bind(&Clik::read_joint_states_callback, this, _1));
+        READING_JOINT_STATES_TOPIC , 10,
+        std::bind(&Clik::read_joint_states_callback, this, _1)
+      );
 
 
       // Publisher comandi al robot
       joint_cmd_pub_ = this->create_publisher<JointStateMsg>(
-        "/cmd/joint_position", 10);
+        PUBLISH_JOINT_COMMAND_TOPIC, 10
+      );
 
 
       // Timer del clik — parte disattivato
@@ -356,7 +361,7 @@ class Clik : public rclcpp::Node
       kinematic_state_->setJointGroupPositions(joint_model_group_, q);
 
 
-      /* 8. Pubblicare q_k+1 su /cmd/joint_position, topic di comando */
+      /* 8. Pubblicare q_k+1 su topic di comando */
       JointStateMsg out_msg;
       kinematic_state_->copyJointGroupPositions(joint_model_group_, out_msg.position);
       out_msg.name = joint_model_group_->getActiveJointModelNames();

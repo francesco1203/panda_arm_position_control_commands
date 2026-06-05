@@ -13,6 +13,7 @@
 //costanti
 #include "pacchetto_nodi/message_alias.hpp" 
 #include "pacchetto_nodi/panda_constants.hpp"
+#include "pacchetto_nodi/topic_names.hpp"
 
 
 using namespace std::placeholders;
@@ -60,14 +61,18 @@ class JointTrajGenerator : public rclcpp::Node
     {
         // Subscriber per leggere la configurazione attuale del robot in tempo reale
         joint_states_sub_ = this->create_subscription<JointStateMsg>(
-            "/joint_states", 10, std::bind(&JointTrajGenerator::joint_states_callback, this, _1));
+            READING_JOINT_STATES_TOPIC, 10, 
+            std::bind(&JointTrajGenerator::joint_states_callback, this, _1)
+        );
         
 
         // TODO : far leggere q0 una sola volta ogni volta che parte l'azione
 
 
         // Publisher per inviare i comandi di posizione al robot
-        joint_cmd_pub_ = this->create_publisher<JointStateMsg>("/cmd/joint_position", 10);
+        joint_cmd_pub_ = this->create_publisher<JointStateMsg>(
+            PUBLISH_JOINT_COMMAND_TOPIC, 10
+        );
 
 
         // Creazione dell'Action Server con CALLBACK LAMBDA (Stile ROS 2 Jazzy)

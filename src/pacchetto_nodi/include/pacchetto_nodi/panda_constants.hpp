@@ -22,7 +22,7 @@ const std::vector<std::string> PANDA_JOINT_NAMES = {
     "panda_joint7"
 };
 
-// const std::vector<double> PANDA_JOINT_MAX_ACCELERATION = { //trovate in rete*
+// const std::vector<double> PANDA_JOINT_MAX_ACCELERATION = { //*
 //     3.75,   // panda_joint1 [rad/s²]
 //     1.875,  // panda_joint2 [rad/s²]
 //     2.5,    // panda_joint3 [rad/s²]
@@ -31,7 +31,7 @@ const std::vector<std::string> PANDA_JOINT_NAMES = {
 //     5.0,    // panda_joint6 [rad/s²]
 //     5.0     // panda_joint7 [rad/s²]
 // };
-//*NOTA: verificare la correttezza delle informazioni se passi fuori simulazione
+//*trovate in rete: verificare la correttezza delle informazioni se le utilizzi fuori simulazione
 
 
 //per controllo di singolarità panda

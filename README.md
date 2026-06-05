@@ -18,11 +18,11 @@ Braccio Panda - Comandi di controllo in posizione / Panda arm - Position control
 
 ---
 
-### Utilizzo / Usage
+### Usage
 
 On LinuxUbuntu, using cmd:
 
-- 0. Download and run your simulator
+- 0. Download and run your moveit and rviz simulator
 (you can use: sudo apt install ros-jazzy-moveit-resources-panda)
 
 Write your commands in src/pacchetto_nodi/config/task_config.yaml
@@ -37,6 +37,13 @@ CMD2 - start task node orchestrator
 - 4. source install/setup.bash
 - 5. ros2 run pacchetto_nodi task_node   $(ros2 pkg prefix pacchetto_nodi)/share/pacchetto_nodi/config/task_config.yaml
 
+### IMPORTANT
+
+Ensure that the following topics are avaiable 
+- /joint_states: where to read joint configuration
+- /cmd/joint_position: where to publish the joint command to move the simulated robot
+
+If your topics have different names than the default ones, change the file pacchetto_nodi/include/pacchetto_nodi/topic_names.hpp
 
 ---
 
