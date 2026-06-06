@@ -25,6 +25,7 @@
 #include "pacchetto_nodi/panda_constants.hpp"
 #include "pacchetto_nodi/message_alias.hpp"
 #include "pacchetto_nodi/eigen_alias.hpp"
+#include "pacchetto_nodi/topic_action_service_names.hpp"
 
 
 #include "yaml-cpp/yaml.h"   // parser YAML
@@ -86,20 +87,27 @@ class TaskOrchestrator : public rclcpp::Node
 
     
     /* COSTRUTTORE */
-    TaskOrchestrator(int argc, char ** argv) : Node("task_orchestrator")
+    TaskOrchestrator(int argc, char ** argv) : Node("task_orchestrator"),
+        joint_action_name_(MOVE_JOINT_ACTION),
+        cartesian_action_name_(MOVE_CARTESIAN_ACTION),
+        clik_service_on_off_name_(CLIK_SERVICE_ON_OFF)
     {
         //Action Client per MoveJointLin --> parla con joint_traj_generator che è l'action server 
         joint_action_client_ = rclcpp_action::create_client<MoveJointLinAct>(
-            this, "move_joint_lin_action");
+            this, joint_action_name_
+        );
       
 
         // Action Client per l'azione cartesiana --> parla con cartesian_traj_generator che è l'action server 
         cartesian_action_client_ = rclcpp_action::create_client<MoveCartesianLinAct>(
-            this, "cartesian_traj_action");
+            this, cartesian_action_name_
+        );
 
 
         // Service Client per il servizio on/off -> parla con clik_node che è il service server 
-        clik_client_ = this->create_client<OnOffSrv>("clik_on_off");
+        clik_client_ = this->create_client<OnOffSrv>(
+            clik_service_on_off_name_
+        );
 
 
         // Controlla che il path sia stato passato
@@ -332,6 +340,11 @@ class TaskOrchestrator : public rclcpp::Node
     ClientPtr_MJL joint_action_client_;         //action client per MoveJointLin
     ClientPtr_MCL   cartesian_action_client_;   // action client per MoveCartesianLin
     OnOffClientPtr  clik_client_;               // service client per servizio on/off clik
+
+    //parametri del robot e della rete ros (passati da .hpp)
+    std::string joint_action_name_;
+    std::string cartesian_action_name_;
+    std::string clik_service_on_off_name_;
 
     //movimenti da eseguire
     std::vector<Move> mosse_;   // lista dei movimenti letti dal file YAML

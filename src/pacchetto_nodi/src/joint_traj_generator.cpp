@@ -13,14 +13,12 @@
 //costanti
 #include "pacchetto_nodi/message_alias.hpp" 
 #include "pacchetto_nodi/panda_constants.hpp"
-#include "pacchetto_nodi/topic_names.hpp"
+#include "pacchetto_nodi/topic_action_service_names.hpp"
 
 
 using namespace std::placeholders;
 
 
-constexpr double T_CAMP       = 0.1;  // 10 Hz  campionamento della traiettoria
-constexpr double qdd_c_CONST  = 1.5;  // 1.5 rad/s^2 qdd_c accel scelta per profilo trapezoidale
 
 
 class JointTrajGenerator : public rclcpp::Node
@@ -45,23 +43,27 @@ class JointTrajGenerator : public rclcpp::Node
     //altro
     using joint_config  = std::vector<double>;
     
-    /* dai .hpp 
-      Alias Messaggi --> Pose, PoseStamped, JointState + joint_config
-      Costanti N_JOINTS, PLANNING_GROUP, LAST_LINK, PANDA_JOINT_NAMES
-    */
-
-
 
     /* Costruttore */
     JointTrajGenerator() : Node("joint_traj_generator"),
-        joint_names_(PANDA_JOINT_NAMES),
-        q0_received_(false),
-        T_(T_CAMP),
-        qdd_c_(qdd_c_CONST)
+        n_joints(N_JOINTS),                                     //da panda_constants.hpp
+        joint_names_(PANDA_JOINT_NAMES),                        //da panda_constants.hpp
+        joint_states_topic_name_(READING_JOINT_STATES_TOPIC),   // da topic_action_service_names.hpp
+        command_topic_name_(PUBLISH_JOINT_COMMAND_TOPIC),       // da topic_action_service_names.hpp
+        joint_action_name_(MOVE_JOINT_ACTION),                 // da topic_action_service_names.hpp
+        q0_received_(false)
     {
+         // parametri da launch_file
+        this->declare_parameter<double>("T_camp", 0.1);     //default 0.1s -> 10Hz pubblicazione traiettoria
+        this->declare_parameter<double>("qdd_c", 1.5);      //default 1.5 rad/s^2 accel in gen.trapezoidale
+
+        T_ = this->get_parameter("T_camp").as_double();
+        qdd_c_ = this->get_parameter("qdd_c").as_double();
+        
+
         // Subscriber per leggere la configurazione attuale del robot in tempo reale
         joint_states_sub_ = this->create_subscription<JointStateMsg>(
-            READING_JOINT_STATES_TOPIC, 10, 
+            joint_states_topic_name_, 10, 
             std::bind(&JointTrajGenerator::joint_states_callback, this, _1)
         );
         
@@ -71,15 +73,14 @@ class JointTrajGenerator : public rclcpp::Node
 
         // Publisher per inviare i comandi di posizione al robot
         joint_cmd_pub_ = this->create_publisher<JointStateMsg>(
-            PUBLISH_JOINT_COMMAND_TOPIC, 10
+            command_topic_name_, 10
         );
 
 
-        // Creazione dell'Action Server con CALLBACK LAMBDA (Stile ROS 2 Jazzy)
+        // Creazione dell'Action Server 
         action_server_ = rclcpp_action::create_server<MoveJointLinAct>(
             this,
-            "move_joint_lin_action", // Nome dell'azione nella rete ROS
-
+            joint_action_name_,
 
             // 1. Lambda per HANDLE GOAL
             [this](const GoalUUID & uuid, GoalPtr goal) {
@@ -94,8 +95,8 @@ class JointTrajGenerator : public rclcpp::Node
                 }
 
                 // Rifiuta se la configurazione desiderata non ha 7 giunti del Panda (errore di comando)
-                if (goal->q_desired.size() != N_JOINTS) {
-                    RCLCPP_ERROR(this->get_logger(), "q_desired deve avere esattamente %d elementi.", N_JOINTS);
+                if (goal->q_desired.size() != static_cast<size_t>(n_joints)) {
+                    RCLCPP_ERROR(this->get_logger(), "q_desired deve avere esattamente %d elementi.", n_joints);
                     return GoalResponse::REJECT;
                 }
 
@@ -137,7 +138,7 @@ class JointTrajGenerator : public rclcpp::Node
 
 
         // inizializzo a 0 prima di leggerla
-        q0_.resize(N_JOINTS, 0.0);
+        q0_.resize(n_joints, 0.0);
     
 
         RCLCPP_INFO(this->get_logger(), "JointTrajGenerator (Azione: move_joint_lin) pronto.");
@@ -151,19 +152,27 @@ class JointTrajGenerator : public rclcpp::Node
     JointStatePubPtr joint_cmd_pub_;
     ServerPtr action_server_;
 
+    //parametri del robot e della rete ROS (passati da .hpp)
+    int n_joints;
     std::vector<std::string> joint_names_;
+    std::string joint_states_topic_name_;
+    std::string command_topic_name_;
+    std::string joint_action_name_;
+
+    //iper-parametri algoritmi del nodo 
+    double T_;                  // Periodo di campionamento traiettoria generata
+    double qdd_c_;              // accel. per profili trapezoidali
+
+    //altro
     joint_config q0_;           // Configurazione iniziale
     bool q0_received_;          // Flag di ricezione q0
-
-    double T_;                  // Periodo di campionamento traiettoria
-    double qdd_c_;              // accel. per profili trapezoidali
 
 
     /* Callback del subscriber */ 
     //serve a leggere q0
     void joint_states_callback(const JointStateMsg::SharedPtr msg)
     {
-        for (int i = 0; i < N_JOINTS; i++) {
+        for (int i = 0; i < n_joints; i++) {
             for (size_t j = 0; j < msg->name.size(); j++) {
                 if (msg->name[j] == joint_names_[i]) {
                     q0_[i] = msg->position[j];
@@ -264,7 +273,7 @@ class JointTrajGenerator : public rclcpp::Node
             double tau = t / duration;      //percentuale completamento
                 if (tau > 1.0) tau = 1.0;   //clamp
 
-            joint_config q_k(N_JOINTS);     //obiettivo in var. giunto (prealloc)
+            joint_config q_k(n_joints);     //obiettivo in var. giunto (prealloc)
 
             
             if(cinematic_profile == 'q')  // uso profilo cinematico del polinomio quintico
@@ -275,7 +284,7 @@ class JointTrajGenerator : public rclcpp::Node
 
                 //aggiorno variabili di giunto - obiettivo
 
-                for (int i = 0; i < N_JOINTS; i++) {
+                for (int i = 0; i < n_joints; i++) {
 
                     //così mi muovo linearmente, con spostamento totale guidato da q_hat
                     q_k[i] = q_start[i] + (q_desired[i] - q_start[i]) * q_hat;
@@ -287,7 +296,7 @@ class JointTrajGenerator : public rclcpp::Node
                 
                 double delta_q, q_hat;  //inizializzazione
 
-                for (int i = 0; i < N_JOINTS; i++) 
+                for (int i = 0; i < n_joints; i++) 
                 {
                     delta_q = q_desired[i] - q_start[i];
                     q_hat   = trapezoidal(t, duration, qdd_c_, delta_q);

@@ -21,16 +21,11 @@
 #include "pacchetto_nodi/message_alias.hpp"
 #include "pacchetto_nodi/panda_constants.hpp"
 #include "pacchetto_nodi/eigen_alias.hpp"
-#include "pacchetto_nodi/topic_names.hpp"
+#include "pacchetto_nodi/topic_action_service_names.hpp"
 
 
 using namespace std::placeholders;
 using namespace std::chrono_literals;
-
-/* COSTANTI NODO*/
-constexpr double T_CAMP = 0.1;                // 10 Hz
-constexpr double cdd_c_rot_CONST = 1.0;       // rad/s²  (per profilo trapezoidale)
-constexpr double cdd_c_trasl_CONST = 1.0;     // m/s²  (per profilo trapezoidale)
 
 
 class CartesianTrajGenerator : public rclcpp::Node
@@ -55,18 +50,25 @@ class CartesianTrajGenerator : public rclcpp::Node
     //altro
     using joint_config  = std::vector<double>;
 
-    /* dai .hpp 
-      Alias Messaggi --> Pose, JointState
-      Costanti N_JOINTS, PLANNING_GROUP, LAST_LINK, PANDA_JOINT_NAMES
-    */
-
 
     /* Costruttore */
     CartesianTrajGenerator() : Node("cartesian_traj_generator"),
-      T_(T_CAMP),
-      cdd_c_trasl_(cdd_c_trasl_CONST),
-      cdd_c_rot_(cdd_c_rot_CONST)
+      planning_group_name_(PLANNING_GROUP),                               // da panda_constants.hpp
+      last_link_name_(LAST_LINK),                                         // da panda_constants.hpp
+      joint_states_topic_name_(READING_JOINT_STATES_TOPIC),               // da topic_action_service_names.hpp
+      cartesian_desired_pose_topic_name_(CARTESIAN_DESIRED_POSE_TOPIC),   // da topic_action_service_names.hpp
+      cartesian_action_name_(MOVE_CARTESIAN_ACTION)                       // da topic_action_service_names.hpp
     {
+
+      // parametri da launch_file
+      this->declare_parameter<double>("T_camp", 0.1);       //default 0.1s -> 10Hz pubblicazione traiettoria
+      this->declare_parameter<double>("cdd_c_trasl", 1.0);  //default 1.0 m/s^2 accel in gen.trapezoidale
+      this->declare_parameter<double>("cdd_c_rot", 1.0);    //default 1.0 rad/s^2 accel in gen.trapezoidale
+
+      T_ = this->get_parameter("T_camp").as_double();
+      cdd_c_trasl_ = this->get_parameter("cdd_c_trasl").as_double();
+      cdd_c_rot_ = this->get_parameter("cdd_c_rot").as_double();
+
 
       // =========================================================
       // Workaround RobotModelLoader:
@@ -86,14 +88,14 @@ class CartesianTrajGenerator : public rclcpp::Node
 
 
       // Gruppo cinematico e link finale
-      joint_model_group_ = kinematic_model->getJointModelGroup(PLANNING_GROUP);
+      joint_model_group_ = kinematic_model->getJointModelGroup(planning_group_name_);
       kinematic_state_ = std::make_shared<moveit::core::RobotState>(kinematic_model);
-      last_link_ = kinematic_state_->getLinkModel(LAST_LINK);
+      last_link_ = kinematic_state_->getLinkModel(last_link_name_);
 
 
       // Subscriber a /joint_states
       joint_states_sub_ = this->create_subscription<JointStateMsg>(
-        READING_JOINT_STATES_TOPIC, 10,
+        joint_states_topic_name_, 10,
 
         // lambda callback: salva l'ultimo joint state ricevuto
         [this](const JointStateMsg::SharedPtr msg) {
@@ -105,14 +107,14 @@ class CartesianTrajGenerator : public rclcpp::Node
 
       // Publisher posa desiderata → letta dal clik
       cartesian_pose_pub_ = this->create_publisher<PoseStampedMsg>(
-        CARTESIAN_DESIRED_POSE_TOPIC, 10
+        cartesian_desired_pose_topic_name_, 10
       );
 
 
       // Action server
       action_server_ = rclcpp_action::create_server<MoveCartesianLinAct>(
         this,
-        "cartesian_traj_action",
+        cartesian_action_name_,
 
         // HANDLE GOAL
         [this](const GoalUUID& uuid, GoalPtr goal) {
@@ -165,12 +167,22 @@ class CartesianTrajGenerator : public rclcpp::Node
     JointStateSubPtr joint_states_sub_;   // subscriber a /joint_states
     ServerPtr action_server_;
 
-    JointStateMsg last_joint_state_;      // ultimo messaggio ricevuto
-    bool joint_state_received_ = false;   // flag: ho ricevuto almeno un messaggio?
+    //parametri robot e rete ros (passati da files.hpp)
+    std::string planning_group_name_;
+    std::string last_link_name_;
+    std::string joint_states_topic_name_;
+    std::string cartesian_desired_pose_topic_name_;
+    std::string cartesian_action_name_;   
 
+    //iper-parametri algortimi, passati da launch file
     float T_;
     float cdd_c_trasl_;
     float cdd_c_rot_;
+
+    //altro
+    JointStateMsg last_joint_state_;      // ultimo messaggio ricevuto
+    bool joint_state_received_ = false;   // flag: ho ricevuto almeno un messaggio?
+
 
     // MoveIt
     rclcpp::Node::SharedPtr robot_loader_node_;

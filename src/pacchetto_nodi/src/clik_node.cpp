@@ -17,16 +17,11 @@
 #include "pacchetto_nodi/message_alias.hpp"
 #include "pacchetto_nodi/panda_constants.hpp"
 #include "pacchetto_nodi/eigen_alias.hpp"       
-#include "pacchetto_nodi/topic_names.hpp" 
+#include "pacchetto_nodi/topic_action_service_names.hpp"
 
 
 using namespace std::chrono_literals;
 using namespace std::placeholders;
-
-
-/* COSTANTI CLIK */
-constexpr double CLIK_PERIOD      = 0.001;  // 1000 Hz
-constexpr double GAMMA_ON_T_CLIK  = 0.5;    // guadagno: gamma = GAMMA_ON_T_CLIK / CLIK_PERIOD
 
 
 class Clik : public rclcpp::Node
@@ -52,48 +47,73 @@ class Clik : public rclcpp::Node
     //altro
     using joint_config  = std::vector<double>;
 
-    /* da .hpp 
-    Alias Messaggi --> Pose, JointState 
-    Alias Eigen --> Vector3d, Quaternion, Matrix ecc..
-    Costanti N_JOINTS, PLANNING_GROUP, LAST_LINK, PANDA_JOINT_NAMES
-    nomi topic
-    */
-
 
     /* COSTRUTTORE */
     Clik() : Node("clik_node"),
       is_on_(false),
       desired_pose_received_(false),
       q_k_received_(false),
-      T_clik(CLIK_PERIOD),                // 1000 Hz
-      gamma_on_T_clik_(GAMMA_ON_T_CLIK),  // guadagno del controllo CLIK
       Q_k_prev_(Quaternion::Identity()),  // inizializza con identità
-      joint_names_(PANDA_JOINT_NAMES),
-      singularity_detected_(false)
+      singularity_detected_(false),
+      n_joints(N_JOINTS),                                                 //da panda_constants.hpp
+      joint_names_(PANDA_JOINT_NAMES),                                    //da panda_constants.hpp
+      planning_group_name_(PLANNING_GROUP),                               //da panda_constants.hpp
+      last_link_name_(LAST_LINK),                                         //da panda_constants.hpp
+      cartesian_desired_pose_topic_name_(CARTESIAN_DESIRED_POSE_TOPIC),   // da topic_action_service_names.hpp
+      joint_states_topic_name_(READING_JOINT_STATES_TOPIC),               // da topic_action_service_names.hpp
+      command_topic_name_(PUBLISH_JOINT_COMMAND_TOPIC),                   // da topic_action_service_names.hpp
+      clik_service_on_off_name_(CLIK_SERVICE_ON_OFF)                      // da topic_action_service_names.hpp
     {
-      // Servizio on_off
-      on_off_service_ = this->create_service<OnOffSrv>(
-        "clik_on_off",
-        std::bind(&Clik::on_off_callback, this, _1, _2));
+       // parametri da launch_file
+      this->declare_parameter<double>("Tclik", 0.001);                    //default 0.001s -> 1000Hz, frequenza del clik
+      this->declare_parameter<double>("gamma_on_T", 0.5);                 //default 0.5 guadagno del clik
+      this->declare_parameter<double>("singularity_trshld_warn", 0.01);   //default 0.01 soglia per considerare a rischio di singolarità 
+      this->declare_parameter<double>("singularity_trshld_error", 0.001); //default 0.001 soglia per considerare di essere in singolarità 
+
+      T_clik = this->get_parameter("Tclik").as_double();
+      gamma_on_T_clik_ = this->get_parameter("gamma_on_T").as_double();
+      singularity_trshld_warn_ = this->get_parameter("singularity_trshld_warn").as_double();
+      singularity_trshld_error_ = this->get_parameter("singularity_trshld_error").as_double();
+
+
+      /* INIZIALIZZAZIONE MOVEIT */
+      // Setup MoveIt — Workaround per RobotModelLoader (VEDI CARTESIAN_TRAJ_GENERATOR per spiegazione)
+      robot_loader_node_ = std::make_shared<rclcpp::Node>(
+          "robot_model_loader_clik",
+          rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true));
+
+      robot_model_loader_ = std::make_shared<robot_model_loader::RobotModelLoader>(robot_loader_node_);
+      const moveit::core::RobotModelPtr& kinematic_model = robot_model_loader_->getModel();
+   
+      joint_model_group_ = kinematic_model->getJointModelGroup(planning_group_name_);
+      kinematic_state_   = std::make_shared<moveit::core::RobotState>(kinematic_model);
+      last_link_         = kinematic_state_->getLinkModel(last_link_name_);
 
 
       // Subscriber posa desiderata — pubblicata da cartesian_traj_generator
       desired_pose_sub_ = this->create_subscription<PoseStampedMsg>(
-        CARTESIAN_DESIRED_POSE_TOPIC, 10,
+        cartesian_desired_pose_topic_name_, 10,
         std::bind(&Clik::read_desired_pose_callback, this, _1)
       );
 
 
       // Subscriber configurazione attuale — pubblicata dal simulatore
       joint_states_sub_ = this->create_subscription<JointStateMsg>(
-        READING_JOINT_STATES_TOPIC , 10,
+        joint_states_topic_name_, 10,
         std::bind(&Clik::read_joint_states_callback, this, _1)
       );
 
 
       // Publisher comandi al robot
       joint_cmd_pub_ = this->create_publisher<JointStateMsg>(
-        PUBLISH_JOINT_COMMAND_TOPIC, 10
+        command_topic_name_, 10
+      );
+
+
+      // Servizio on_off
+      on_off_service_ = this->create_service<OnOffSrv>(
+        clik_service_on_off_name_,
+        std::bind(&Clik::on_off_callback, this, _1, _2)
       );
 
 
@@ -102,22 +122,8 @@ class Clik : public rclcpp::Node
       timer_->cancel();
 
 
-      //inizializza q_k_ con N_JOINTS (7) zeri
-      q_k_.resize(N_JOINTS, 0.0);
-
-
-      //inizializza MoveIt
-      // Setup MoveIt — nodo separato come workaround per RobotModelLoader
-      robot_loader_node_ = std::make_shared<rclcpp::Node>(
-          "robot_model_loader_clik",
-          rclcpp::NodeOptions().automatically_declare_parameters_from_overrides(true));
-
-      robot_model_loader_ = std::make_shared<robot_model_loader::RobotModelLoader>(robot_loader_node_);
-      const moveit::core::RobotModelPtr& kinematic_model = robot_model_loader_->getModel();
-
-      joint_model_group_ = kinematic_model->getJointModelGroup(PLANNING_GROUP);
-      kinematic_state_   = std::make_shared<moveit::core::RobotState>(kinematic_model);
-      last_link_         = kinematic_state_->getLinkModel(LAST_LINK);
+      //inizializza q_k_ con n_joints (7) zeri
+      q_k_.resize(n_joints, 0.0);
 
 
       RCLCPP_INFO(this->get_logger(), "Nodo CLIK pronto. In attesa di attivazione...");
@@ -125,26 +131,40 @@ class Clik : public rclcpp::Node
 
   private:
   
-    /* puntatori a sottoblocchi */
+    /* sottocomponenti del nodo */
     ServiceOnOffPtr on_off_service_;    //service server
     PoseSubPtr desired_pose_sub_;       //subscriber alla posa desiderata
     JointStateSubPtr joint_states_sub_; //subscriber alla configurazione attuale
     JointStatePubPtr joint_cmd_pub_;    //publisher alla configurazione da eseguire
     TimerPtr timer_;                    //timer per ciclo di controllo
 
+    //temp variables / altro
     bool is_on_;                          // stato del clik
     bool desired_pose_received_;          // flag: ho ricevuto almeno una posa?
     bool q_k_received_;                   // flag: ho ricevuto almeno un joint_state?
 
-    float T_clik;                         // periodo di campionamento del controllo CLIK
-    float gamma_on_T_clik_;               // guadagno del controllo CLIK
     Quaternion Q_k_prev_;                 // Quaternione al passo precedente per la continuità
-
     PoseStampedMsg desired_pose_stamped;  // ultima posa desiderata ricevuta
     joint_config q_k_;                    // configurazione attuale del robot
-    std::vector<std::string> joint_names_;
 
     bool singularity_detected_;           // true = clik fermato per singolarità
+
+    //parametri robot e rete ros (passati da files.hpp)
+    int n_joints;
+    std::vector<std::string> joint_names_;
+    std::string planning_group_name_;
+    std::string last_link_name_;
+    std::string cartesian_desired_pose_topic_name_;
+    std::string joint_states_topic_name_;
+    std::string command_topic_name_;
+    std::string clik_service_on_off_name_;
+
+    //iper-parametri degli algoritmi, passati da launch file
+    double T_clik;                         // periodo di campionamento del controllo CLIK
+    double gamma_on_T_clik_;               // guadagno del controllo CLIK
+    double singularity_trshld_warn_;       // soglia per considerare a rischio di singolarità 
+    double singularity_trshld_error_;      //soglia per considerare di essere in singolarità 
+
 
     // MoveIt
     rclcpp::Node::SharedPtr robot_loader_node_;
@@ -172,7 +192,7 @@ class Clik : public rclcpp::Node
     */
     void read_joint_states_callback(const JointStateMsg::SharedPtr msg)
     {
-      for (int i = 0; i < N_JOINTS; i++) {
+      for (int i = 0; i < n_joints; i++) {
         for (size_t j = 0; j < msg->name.size(); j++) {
           if (msg->name[j] == joint_names_[i]) {
             q_k_[i] = msg->position[j];
@@ -299,14 +319,15 @@ class Clik : public rclcpp::Node
 
 
       /* 4. Calcolare jacobiano J(q_k_) con MoveIt */
-      MatrixXd J(6, N_JOINTS);
+      MatrixXd J(6, n_joints);
       Vector3d reference_point(0.0, 0.0, 0.0);      //se messo a 0, calcola J rispetto end effector, altrimenti a un punto traslato del riferimento
 
       bool ok_calcolo = kinematic_state_->getJacobian(
           joint_model_group_,
           last_link_,
           reference_point,
-          J);                         //riempie J con il jacobiano calcolato da MoveIt
+          J
+        );                         //riempie J con il jacobiano calcolato da MoveIt
 
       
       if (!ok_calcolo) {
@@ -324,12 +345,12 @@ class Clik : public rclcpp::Node
       Eigen::BDCSVD<Eigen::MatrixXd> svd(J);
       double sigma_min = svd.singularValues().minCoeff();
 
-      if (sigma_min < SINGULARITY_THRESHOLD_ERROR)
+      if (sigma_min < singularity_trshld_error_)
       {
           // Singolarità critica — ferma il clik
           RCLCPP_ERROR(this->get_logger(),
               "SINGOLARITA' CRITICA rilevata! sigma_min=%.6f < %.6f. Fermo il CLIK.",
-              sigma_min, SINGULARITY_THRESHOLD_ERROR);
+              sigma_min, singularity_trshld_error_);
 
           singularity_detected_ = true;
           is_on_ = false;
@@ -337,7 +358,7 @@ class Clik : public rclcpp::Node
 
           return; //blocca l'esecuzione
       }
-      else if (sigma_min < SINGULARITY_THRESHOLD_WARNING)
+      else if (sigma_min < singularity_trshld_warn_)
       {
           // Avvicinamento alla singolarità — avvisa ma continua
           RCLCPP_WARN(this->get_logger(),
@@ -375,7 +396,7 @@ class Clik : public rclcpp::Node
 
 
     /* ALTRI METODI PRIVATI*/
-    // Dalla traccia: evita salti di segno nel quaternione tra iterazioni successive
+    // evita salti di segno nel quaternione tra iterazioni successive
     Quaternion quaternionContinuity(const Quaternion& Q_k,  const Quaternion& Q_k_minus_1)
     {
         // Prodotto scalare tra le parti vettoriali dei due quaternioni
