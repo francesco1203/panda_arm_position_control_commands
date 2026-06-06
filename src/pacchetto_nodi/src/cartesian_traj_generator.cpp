@@ -175,9 +175,9 @@ class CartesianTrajGenerator : public rclcpp::Node
     std::string cartesian_action_name_;   
 
     //iper-parametri algortimi, passati da launch file
-    float T_;
-    float cdd_c_trasl_;
-    float cdd_c_rot_;
+    double T_;
+    double cdd_c_trasl_;
+    double cdd_c_rot_;
 
     //altro
     JointStateMsg last_joint_state_;      // ultimo messaggio ricevuto
