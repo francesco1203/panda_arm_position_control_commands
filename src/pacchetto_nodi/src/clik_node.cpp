@@ -3,21 +3,20 @@
 #include <functional>
 
 #include "rclcpp/rclcpp.hpp"
-#include "sensor_msgs/msg/joint_state.hpp"
-#include "geometry_msgs/msg/pose.hpp"
 
-#include <Eigen/Dense>  //libreria per algebra lineare
+
 #include <moveit/robot_model_loader/robot_model_loader.hpp>
 #include <moveit/robot_model/robot_model.hpp>
 #include <moveit/robot_state/robot_state.hpp>
 
-#include "pacchetto_interfacce/srv/on_off.hpp"
 
 
-#include "pacchetto_nodi/message_alias.hpp"
+#include "pacchetto_nodi/eigen_utilities.hpp" 
+#include "pacchetto_nodi/message_utilities.hpp"
 #include "pacchetto_nodi/panda_constants.hpp"
-#include "pacchetto_nodi/eigen_alias.hpp"       
+#include "pacchetto_nodi/set_bool_srv_utilities.hpp"
 #include "pacchetto_nodi/topic_action_service_names.hpp"
+
 
 
 using namespace std::chrono_literals;
@@ -30,11 +29,8 @@ class Clik : public rclcpp::Node
 
     /* Alias*/
 
-    //per servizio OnOff
-    using OnOffSrv = pacchetto_interfacce::srv::OnOff;
-    using OnOffSrvRequestPtr = std::shared_ptr<OnOffSrv::Request>;
-    using OnOffSrvResponsePtr = std::shared_ptr<OnOffSrv::Response>;
-    using ServiceOnOffPtr = rclcpp::Service<OnOffSrv>::SharedPtr;
+    //per servizio di attivazione clik
+    using ServiceOnOffPtr = SetBoolServerPtr;
 
     // per publisher e subscriber
     using JointStatePubPtr = rclcpp::Publisher<JointStateMsg>::SharedPtr;   
@@ -111,7 +107,7 @@ class Clik : public rclcpp::Node
 
 
       // Servizio on_off
-      on_off_service_ = this->create_service<OnOffSrv>(
+      on_off_service_ = this->create_service<SetBoolSrv>(
         clik_service_on_off_name_,
         std::bind(&Clik::on_off_callback, this, _1, _2)
       );
@@ -202,16 +198,19 @@ class Clik : public rclcpp::Node
       q_k_received_ = true;
     }
 
-    /* Callback del servizio on_off */
-    void on_off_callback(const OnOffSrvRequestPtr request, const OnOffSrvResponsePtr response)
+    /* Callback del servizio on_off basato su SetBool */
+    void on_off_callback(const SetBoolRequestPtr request, const SetBoolResponsePtr response)
     {
-      if (request->set_on && !is_on_)
+      if (request->data && !is_on_)
       {
         // sono in singolarità? Se sì, non attivare il clik e segnala l'errore
         if (singularity_detected_) {
           RCLCPP_ERROR(this->get_logger(),
               "Impossibile riattivare: singolarita' rilevata. Porta prima il robot fuori dalla singolarità.");
-          response->is_on = false;
+          
+          response->success = false; // response->success sostituisce response->is_on
+          response->message = "Errore: Robot in singolarità critica!";
+          
           return;
         }
 
@@ -219,25 +218,39 @@ class Clik : public rclcpp::Node
         if (!q_k_received_) {
           RCLCPP_ERROR(this->get_logger(),
             "Impossibile attivare: configurazione attuale non ricevuta.");
-          response->is_on = false;
+          response->success = false;
+          response->message = "Errore: /joint_states non ancora ricevuti!";
           return;
         }
+
+        // Attivazione nominale
         RCLCPP_INFO(this->get_logger(), "CLIK attivato.");
         is_on_ = true;
         timer_->reset();   // avvia il timer
+
+        response->success = true;
+        response->message = "Clik attivato con successo.";
       }
-      else if (!request->set_on && is_on_)
+      else if (!request->data && is_on_)
       {
+        // Disattivazione nominale
         RCLCPP_INFO(this->get_logger(), "CLIK disattivato.");
         is_on_ = false;
         timer_->cancel();  // ferma il timer
+
+        response->success = true;
+        response->message = "Clik disattivato con successo.";
       }
       else
       {
+        //stato già coerente con la richiesta
         RCLCPP_INFO(this->get_logger(),
           "CLIK già in stato: %s", is_on_ ? "ON" : "OFF");
+
+        response->success = true;
+        response->message = is_on_ ? "Il clik era già attivo." : "Il clik era già spento.";
       }
-      response->is_on = is_on_;
+      
     }
 
     /* Callback del timer — ciclo di controllo CLIK

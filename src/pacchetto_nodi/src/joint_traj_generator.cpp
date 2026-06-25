@@ -6,12 +6,12 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
-#include "sensor_msgs/msg/joint_state.hpp"
+
 
 #include "pacchetto_interfacce/action/move_joint_lin.hpp"
 
-//costanti
-#include "pacchetto_nodi/message_alias.hpp" 
+//mie librerie
+#include "pacchetto_nodi/message_utilities.hpp" 
 #include "pacchetto_nodi/panda_constants.hpp"
 #include "pacchetto_nodi/topic_action_service_names.hpp"
 

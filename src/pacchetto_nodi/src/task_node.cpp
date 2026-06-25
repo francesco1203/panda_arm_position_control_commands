@@ -22,9 +22,11 @@
 #include "pacchetto_interfacce/srv/on_off.hpp"
 
 
+//mie librerie
+#include "pacchetto_nodi/eigen_utilities.hpp" 
+#include "pacchetto_nodi/message_utilities.hpp"
 #include "pacchetto_nodi/panda_constants.hpp"
-#include "pacchetto_nodi/message_alias.hpp"
-#include "pacchetto_nodi/eigen_alias.hpp"
+#include "pacchetto_nodi/set_bool_srv_utilities.hpp"
 #include "pacchetto_nodi/topic_action_service_names.hpp"
 
 
@@ -81,9 +83,8 @@ class TaskOrchestrator : public rclcpp::Node
     using Promise_MCL             = std::promise<WrappedResult_MCL>;
     using ClientPtr_MCL           = rclcpp_action::Client<MoveCartesianLinAct>::SharedPtr;
 
-    // Servizio OnOff
-    using OnOffSrv            = pacchetto_interfacce::srv::OnOff;
-    using OnOffClientPtr      = rclcpp::Client<OnOffSrv>::SharedPtr;
+    // Servizio OnOff (usando SetBool)
+    using OnOffClientPtr      = SetBoolClientPtr;
 
     
     /* COSTRUTTORE */
@@ -105,7 +106,7 @@ class TaskOrchestrator : public rclcpp::Node
 
 
         // Service Client per il servizio on/off -> parla con clik_node che è il service server 
-        clik_client_ = this->create_client<OnOffSrv>(
+        clik_client_ = this->create_client<SetBoolSrv>(
             clik_service_on_off_name_
         );
 
@@ -189,41 +190,7 @@ class TaskOrchestrator : public rclcpp::Node
         return future_risultato;
     }
 
-    /**
-     * Chiama il servizio clik_on_off per accendere o spegnere il CLIK.
-     * 
-     * param accendi  true = accendi il clik, false = spegnilo
-     * return         true se la chiamata è andata a buon fine
-     */
-    bool chiama_clik_on_off(bool accendi)
-    {
-        // 1. Aspettiamo che il server del servizio sia disponibile (timeout 5s)
-        if (!clik_client_->wait_for_service(5s)) {
-            RCLCPP_ERROR(this->get_logger(), "Servizio 'clik_on_off' non trovato!");
-            return false;
-        }
-
-        // 2. Prepariamo la request: è una struct con il campo set_on (bool)
-        auto request = std::make_shared<OnOffSrv::Request>();
-        request->set_on = accendi;   // true = ON, false = OFF
-
-        // 3. Mandiamo la request in modo asincrono.
-        //    async_send_request restituisce un future che si sblocca quando il server risponde.
-        auto future_risposta = clik_client_->async_send_request(request);
-
-        // 4. Aspettiamo la risposta con un timeout di 5 secondi.
-        if (future_risposta.wait_for(5s) != std::future_status::ready) {
-            RCLCPP_ERROR(this->get_logger(), "Timeout in attesa risposta clik_on_off.");
-            return false;
-        }
-
-        // 5. Leggiamo la risposta: is_on ci dice lo stato attuale del clik
-        bool stato = future_risposta.get()->is_on;
-        RCLCPP_INFO(this->get_logger(),
-            "CLIK ora è: %s", stato ? "ON" : "OFF");
-
-        return true;
-    }
+    
 
     /**
      * Manda un goal all'action server cartesian_traj_generator.
@@ -316,7 +283,14 @@ class TaskOrchestrator : public rclcpp::Node
         return future_risultato;
     }
 
-    //altri metodi
+
+    //attivazione/disattivazione clik
+    bool enable_clik_on() {return chiama_clik_on_off(true);}
+    bool disable_clik_off() {return chiama_clik_on_off(false);}
+
+
+
+    /* ALTRI METODI*/
 
     // Getter per la lista delle mosse (non modificabile)
     const std::vector<Move> & get_mosse() const { return mosse_; }
@@ -353,6 +327,50 @@ class TaskOrchestrator : public rclcpp::Node
 
 
     /* metodi privati*/
+
+
+    /**
+     * Chiama il servizio clik_on_off per accendere o spegnere il CLIK.
+     * 
+     * param accendi  true = accendi il clik, false = spegnilo
+     * return         true se la chiamata è andata a buon fine
+     */
+    bool chiama_clik_on_off(bool accendi)
+    {
+        // 1. Aspettiamo che il server del servizio sia disponibile (timeout 5s)
+        if (!clik_client_->wait_for_service(5s)) {
+            RCLCPP_ERROR(this->get_logger(), "Servizio 'clik_on_off' non trovato!");
+            return false;
+        }
+
+        // 2. Prepariamo la request: è una struct con il campo set_on (bool)
+        auto request = std::make_shared<SetBoolSrv::Request>();
+        request->data = accendi;   // true = ON, false = OFF
+
+        // 3. Mandiamo la request in modo asincrono.
+        //    async_send_request restituisce un future che si sblocca quando il server risponde.
+        auto future_risposta = clik_client_->async_send_request(request);
+
+        // 4. Aspettiamo la risposta con un timeout di 5 secondi.
+        if (future_risposta.wait_for(5s) != std::future_status::ready) {
+            RCLCPP_ERROR(this->get_logger(), "Timeout in attesa risposta clik_on_off.");
+            return false;
+        }
+
+        // 5. Leggiamo se ha avuto successo e segnaliamolo
+        if(future_risposta.get()->success) {
+             RCLCPP_INFO(this->get_logger(),
+                "Successo --> CLIK ora è: %s", accendi ? "ON" : "OFF");
+
+        } else {
+            RCLCPP_ERROR(this->get_logger(), "Servizio clik_on_off ha fallito: %s",
+                future_risposta.get()->message.c_str());
+            return false;
+        }
+       
+        return true;
+    }
+
 
     // Legge il file YAML al path indicato e restituisce la lista dei movimenti.
     // Chiamato una volta sola nel costruttore.
@@ -538,7 +556,7 @@ int main(int argc, char ** argv)
             orchestrator->print_and_wait("Avvia movimento cartesiano? (+ accensione clik)");
 
             // Accendi il CLIK prima di mandare il goal
-            if (!orchestrator->chiama_clik_on_off(true)) {
+            if (!orchestrator->enable_clik_on()) {
                 RCLCPP_ERROR(orchestrator->get_logger(),
                     "Impossibile accendere il CLIK. Interrompo.");
                 goto shutdown_sequence;
@@ -555,7 +573,7 @@ int main(int argc, char ** argv)
             future.wait();
 
             // Spegni sempre il CLIK, anche se il movimento è fallito
-            orchestrator->chiama_clik_on_off(false);
+            orchestrator->disable_clik_off();
 
             if (future.get().code != rclcpp_action::ResultCode::SUCCEEDED) {
                 RCLCPP_ERROR(orchestrator->get_logger(),

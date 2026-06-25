@@ -7,20 +7,20 @@
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp/wait_for_message.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
-#include "geometry_msgs/msg/pose_stamped.hpp"
-#include "sensor_msgs/msg/joint_state.hpp"
+
 
 // MoveIt
 #include <moveit/robot_model_loader/robot_model_loader.hpp>
 #include <moveit/robot_model/robot_model.hpp>
 #include <moveit/robot_state/robot_state.hpp>
 
+
 #include "pacchetto_interfacce/action/move_cartesian_lin.hpp"
 
-//costanti
-#include "pacchetto_nodi/message_alias.hpp"
+
+#include "pacchetto_nodi/eigen_utilities.hpp" 
+#include "pacchetto_nodi/message_utilities.hpp"
 #include "pacchetto_nodi/panda_constants.hpp"
-#include "pacchetto_nodi/eigen_alias.hpp"
 #include "pacchetto_nodi/topic_action_service_names.hpp"
 
 

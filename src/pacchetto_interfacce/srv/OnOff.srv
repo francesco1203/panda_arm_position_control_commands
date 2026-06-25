@@ -1,5 +1,0 @@
-# Request
-bool set_on    # true = attiva, false = disattiva
----
-# Response
-bool is_on     # true = attivo, false = disattivo

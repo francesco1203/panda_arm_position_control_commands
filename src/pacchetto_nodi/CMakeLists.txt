@@ -15,6 +15,7 @@ find_package(geometry_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)                    
 find_package(moveit_core REQUIRED)               
 find_package(moveit_ros_planning REQUIRED)   
+find_package(std_srvs REQUIRED)
 
 # Aggiungi tra gli altri find_package
 find_package(yaml-cpp REQUIRED)
@@ -54,6 +55,7 @@ ament_target_dependencies(clik_node
   sensor_msgs
   geometry_msgs
   pacchetto_interfacce
+  std_srvs                # Richiesto per SetBool
   Eigen3                    
   moveit_core               
   moveit_ros_planning       
@@ -66,7 +68,8 @@ ament_target_dependencies(task_node
   rclcpp_action
   sensor_msgs        
   geometry_msgs      
-  Eigen3                    
+  Eigen3
+  std_srvs                # Richiesto per SetBool                    
   # moveit_core               
   # moveit_ros_planning 
   pacchetto_interfacce

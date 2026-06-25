@@ -15,7 +15,6 @@ find_package(geometry_msgs REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
    "action/MoveJointLin.action"
    "action/MoveCartesianLin.action"
-   "srv/OnOff.srv"
  DEPENDENCIES geometry_msgs)
 
 ament_package()
