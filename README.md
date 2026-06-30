@@ -23,7 +23,7 @@ Braccio Panda - Comandi di controllo in posizione / Panda arm - Position control
 On LinuxUbuntu, using cmd:
 
 - 0. Download and run your moveit and rviz simulator
-(you can use: sudo apt install ros-jazzy-moveit-resources-panda)
+(for example you can use: sudo apt install ros-jazzy-moveit-resources-panda)
 
 Write your commands in src/pacchetto_nodi/config/task_config.yaml
 
