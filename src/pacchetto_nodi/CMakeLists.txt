@@ -22,7 +22,7 @@ find_package(yaml-cpp REQUIRED)
 
 
 
-# include cartella include dove ci sono header file, in particolare common.hpp con costanti e alias comuni a più nodi
+# include cartella include dove ci sono header file
 include_directories(include)
 
 
@@ -32,7 +32,6 @@ ament_target_dependencies(joint_traj_generator
   rclcpp
   rclcpp_action
   sensor_msgs
-  geometry_msgs           # aggiunto per aver incluso message_alias.hpp
   pacchetto_interfacce
 )
 
@@ -65,9 +64,7 @@ ament_target_dependencies(clik_node
 add_executable(task_node src/task_node.cpp)
 ament_target_dependencies(task_node
   rclcpp
-  rclcpp_action
-  sensor_msgs        
-  geometry_msgs      
+  rclcpp_action     
   Eigen3
   std_srvs                # Richiesto per SetBool                    
   # moveit_core               

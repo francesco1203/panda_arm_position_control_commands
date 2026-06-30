@@ -19,12 +19,10 @@
 //azioni e servizi
 #include "pacchetto_interfacce/action/move_joint_lin.hpp"  
 #include "pacchetto_interfacce/action/move_cartesian_lin.hpp"
-#include "pacchetto_interfacce/srv/on_off.hpp"
 
 
 //mie librerie
 #include "pacchetto_nodi/eigen_utilities.hpp" 
-#include "pacchetto_nodi/message_utilities.hpp"
 #include "pacchetto_nodi/panda_constants.hpp"
 #include "pacchetto_nodi/set_bool_srv_utilities.hpp"
 #include "pacchetto_nodi/topic_action_service_names.hpp"

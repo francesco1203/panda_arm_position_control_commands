@@ -7,11 +7,13 @@
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
 
+//messaggi
+#include "sensor_msgs/msg/joint_state.hpp"
+
 
 #include "pacchetto_interfacce/action/move_joint_lin.hpp"
 
 //mie librerie
-#include "pacchetto_nodi/message_utilities.hpp" 
 #include "pacchetto_nodi/panda_constants.hpp"
 #include "pacchetto_nodi/topic_action_service_names.hpp"
 
@@ -25,6 +27,9 @@ class JointTrajGenerator : public rclcpp::Node
 {
   public:
     /* Alias */
+
+    // Messaggi
+    using JointStateMsg  = sensor_msgs::msg::JointState;
 
     //publisher e subscriber
     using JointStateSubPtr = rclcpp::Subscription<JointStateMsg>::SharedPtr;

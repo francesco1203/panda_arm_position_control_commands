@@ -9,6 +9,11 @@
 #include "rclcpp_action/rclcpp_action.hpp"
 
 
+//messaggi
+#include "sensor_msgs/msg/joint_state.hpp"
+#include "geometry_msgs/msg/pose_stamped.hpp" 
+
+
 // MoveIt
 #include <moveit/robot_model_loader/robot_model_loader.hpp>
 #include <moveit/robot_model/robot_model.hpp>
@@ -19,7 +24,6 @@
 
 
 #include "pacchetto_nodi/eigen_utilities.hpp" 
-#include "pacchetto_nodi/message_utilities.hpp"
 #include "pacchetto_nodi/panda_constants.hpp"
 #include "pacchetto_nodi/topic_action_service_names.hpp"
 
@@ -32,6 +36,10 @@ class CartesianTrajGenerator : public rclcpp::Node
 {
   public:
     /* Alias */
+
+    // Messaggi
+    using JointStateMsg  = sensor_msgs::msg::JointState;
+    using PoseStampedMsg = geometry_msgs::msg::PoseStamped;
 
     //publisher e subscriber
     using JointStateSubPtr = rclcpp::Subscription<JointStateMsg>::SharedPtr;
@@ -83,6 +91,7 @@ class CartesianTrajGenerator : public rclcpp::Node
 
       robot_model_loader_ = std::make_shared<robot_model_loader::RobotModelLoader>(robot_loader_node_);
       const moveit::core::RobotModelPtr& kinematic_model = robot_model_loader_->getModel();
+
 
       RCLCPP_INFO(this->get_logger(), "Model frame: %s", kinematic_model->getModelFrame().c_str());
 
