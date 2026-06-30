@@ -6,9 +6,9 @@ Braccio Panda - Comandi di controllo in posizione / Panda arm - Position control
 
 ### Scopo del Progetto / Project Aim
 
-(IT) : Realizzare i comandi in posizione, movimento giunti e movimento cartesiano, per il braccio robotica Panda (Franka Emika) e simulare
+(IT) : Leggere da file e eseguire i comandi in posizione, movimento giunti e movimento cartesiano, per il braccio robotica Panda (Franka Emika) e simulare
 
-(EN) : To realize position command, joints movement and cartesian movement, for the robotic arm Panda (Franka Emika) and simulate
+(EN) : To read from file and execute position command, joints movement and cartesian movement, for the robotic arm Panda (Franka Emika) and simulate
 
 ---
 
